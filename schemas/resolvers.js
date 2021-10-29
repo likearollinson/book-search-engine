@@ -1,39 +1,72 @@
-const { Matchup, Tech } = require('../models');
+const { Profile } = require('../server/models');
 
 const resolvers = {
   Query: {
-    matchups: async () => {
-      return Matchup.find().sort({ createdAt: -1 });
+    profiles: async () => {
+      return Profile.find({});
     },
 
-    matchup: async (parent, { matchupId }) => {
-      return Matchup.findOne({ _id: matchupId });
-    },
-    techs: async () => {
-      return Tech.find().sort({ createdAt: -1 });
+    profile: async (parent, { profileId }) => {
+      return Profile.findOne({ _id: profileId });
     },
 
-    tech: async (parent, { techId }) => {
-      return Tech.findOne({ _id: techId });
-    },
+    me: async (parent, arge, context) => {
+      if (context.user) {
+        return Profile.findOne({ _id: context.user._id });
+      }
+      throw new AuthenticationError('Please login!');
+    }
   },
 
   Mutation: {
-    addMatchup: async (parent, { tech1, tech2 }) => {
-      return Matchup.create({ tech1, tech2 });
+    createProfile: async (parent, { name, email, password }) => {
+      const profile = await Profile.create({ name, email, password });
+      const token = signToken(profile);
+
+      return { token, profile };
     },
-    addVote: async (parent, { matchupId, tech1_votes, tech2_votes }) => {
-      return Matchup.findOneAndUpdate(
-        { _id: matchupId },
-        {
-          $addToSet: { tech1_votes: {} },
-        },
-        {
-          new: true,
-          runValidators: true,
-        }
-      );
+    login: async (parent, { email, password }) => {
+      const profile = await Profile.findOne({ email });
+
+      if (!profile) {
+        throw new AuthenticationError('No profile with this email found!');
+      }
+
+      const correctPw = await profile.isCorrectPassword(password);
+
+      if (!correctPw) {
+        throw new AuthenticationError('Incorrect password!');
+      }
+
+      const token = signToken(profile);
+      return { token, profile };
     },
+
+    saveBook: async (parent, { profileId, savedBook }, context) => {
+      if (context.user) {
+        return Profile.findOneAndUpdate(
+          { _id: profileId },
+          {
+            $addToSet: { savedBooks: savedBook },
+          },
+          {
+            new: true,
+            runValidators: true,
+          }
+        );
+      }
+      throw new AuthenticationError('Please login!');
+    },
+
+    deleteBook: async (parent, { savedBook }, context) => {
+      if (context.user) {
+        return Profile.findOneAndUpdate(
+          { _id: context.profileId },
+          { $pull: { savedBooks: savedBook } },
+          { new: true }
+        );
+      }
+    }
   },
 };
 
