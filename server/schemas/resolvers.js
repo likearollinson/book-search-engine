@@ -1,18 +1,16 @@
 const { User } = require('../models');
 
+const { signToken } = require('../utils/auth.js');
+
+const { AuthenticationError } = require('apollo-server-errors');
+
 const resolvers = {
   Query: {
-    users: async () => {
-      return User.find({});
-    },
-
-    user: async (parent, { userId }) => {
-      return User.findOne({ _id: userId });
-    },
 
     me: async (parent, arge, context) => {
       if (context.user) {
-        return User.findOne({ _id: context.user._id });
+        const userData = await User.findOne({ _id: context.user._id }).select('-__v -password');
+        return userData;
       }
       throw new AuthenticationError('Please login!');
     }
@@ -42,30 +40,33 @@ const resolvers = {
       return { token, user };
     },
 
-    saveBook: async (parent, { userId, savedBook }, context) => {
+    saveBook: async (parent, { input }, context) => {
       if (context.user) {
-        return User.findOneAndUpdate(
-          { _id: userId },
+        const updateUser = await User.findOneAndUpdate(
+          { _id: context.user._id },
           {
-            $addToSet: { savedBooks: savedBook },
+            $addToSet: { savedBooks: input },
           },
           {
             new: true,
             runValidators: true,
           }
         );
+        return updateUser;
       }
       throw new AuthenticationError('Please login!');
     },
 
-    deleteBook: async (parent, { savedBook }, context) => {
+    deleteBook: async (parent, { bookId }, context) => {
       if (context.user) {
-        return User.findOneAndUpdate(
-          { _id: context.userId },
-          { $pull: { savedBooks: savedBook } },
+        const updateUser = await User.findOneAndUpdate(
+          { _id: context.user._id },
+          { $pull: { savedBooks: { bookId: bookId } } },
           { new: true }
         );
+        return updateUser;
       }
+      throw new AuthenticationError('Please login!');
     }
   },
 };
